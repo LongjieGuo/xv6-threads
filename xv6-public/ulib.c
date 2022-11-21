@@ -104,3 +104,18 @@ memmove(void *vdst, const void *vsrc, int n)
     *dst++ = *src++;
   return vdst;
 }
+
+
+void lock_acquire(lock_t *m){
+  while(xchg(&m->flag, 1) == 1);
+}
+
+void lock_release(lock_t *m){
+	xchg(&m->flag, 0);
+}
+
+int lock_init(lock_t *m)
+{
+  m->flag = 0;
+  return 0;
+}
