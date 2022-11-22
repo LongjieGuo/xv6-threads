@@ -119,3 +119,22 @@ int lock_init(lock_t *m)
   m->flag = 0;
   return 0;
 }
+
+int thread_create(void (*start_routine)(void *, void *), void* arg1, void* arg2)
+{
+  // This routine should call malloc() to create a new 
+  //user stack, use clone() to create the child thread and get it running. 
+  //It returns the newly created PID to the parent and 0 to the child (if successful), -1 otherwise.
+  void* stack = malloc(4096); // later this will change to the users stack 
+  return clone(start_routine, arg1, arg2, stack);
+}
+
+int thread_join()
+{
+  //An int thread_join() call should also be created,
+  // which calls the underlying join() system call, frees the user stack,
+  // and then returns. It returns the waited-for PID (when successful), -1 otherwise.
+  void* stack_ptr;
+  int ret = join(&stack_ptr);
+  return ret;
+}
