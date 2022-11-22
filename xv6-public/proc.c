@@ -226,7 +226,7 @@ fork(void)
 int 
 clone(void(*fcn)(void *, void *), void *arg1, void *arg2, void *stack)
 {
-  //int i, pid;
+  int i, pid;
   struct proc *np;
   struct proc *p = myproc();
 
@@ -244,56 +244,36 @@ clone(void(*fcn)(void *, void *), void *arg1, void *arg2, void *stack)
   // I dont think we need the above because thread is tied to process and 
   // process is tied to kernal so I think this is fine/ not needed?
 
+// copying process state to thread
   np->sz = p->sz; //size of thread
   np->parent = p; // the process the thread lives in
   *np->tf = *p->tf;  //the trap frame of thread
   np->pgdir = p->pgdir;   // page dir the thread is in 
-  
-  void * sarg1;
-  void *sarg2;
-  void *sret;
-
-  // Push fake return address to the stack of thread
-  sret = stack + PGSIZE - 3 * sizeof(void *);
-  *(uint*)sret = 0xFFFFFFF;
-
-  // Push first argument to the stack of thread
-  sarg1 = stack + PGSIZE - 2 * sizeof(void *);
-  *(uint*)sarg1 = (uint)arg1;
-
-  // Push second argument to the stack of thread
-  sarg2 = stack + PGSIZE - 1 * sizeof(void *);
-  *(uint*)sarg2 = (uint)arg2;
-
-  // Put address of new stack in esp, 
+  // Put address of new stack in eip, esp , eax, and share stack space with user stack
   np->tf->eip = (uint) fcn;
-  np->tf->esp = (uint) stack;
-  np->tf->eax = 0;
+  np->tstack = stack; // adddr of stack 
+  np->tf->esp = (uint) stack; // before growing? add stack pointer here at start of stack
+  np->tf->ebp = np->tf->esp; // set base pointer, is this needed? ask where??????????????
+ // put arguments on stack, essentially grows stack
+  *((uint*)(stack + PGSIZE - (3 * sizeof(uint)))) = 0xffffffff; // return addr
+  *((uint*)(stack + PGSIZE - (2 * sizeof(uint)))) = (uint)arg2; // second arg
+  *((uint*)(stack + PGSIZE - sizeof(uint))) = (uint)arg2; // first arg
 
+  np->tf->esp += PGSIZE - 3 * sizeof(void*); // set instruction pointer 
+  np->tf->eax = 0; // clear eax so fork will return 0 for children. 
 
-  // Save address of stack
-  np->tstack = stack;
-
-  // Initialize stack pointer to appropriate address
-  np->tf->esp += PGSIZE - 3 * sizeof(void*);
-  np->tf->ebp = np->tf->esp;
-
-
-  int i;
+//copied from fork v, needed???
   for(i = 0; i < NOFILE; i++)
     if(p->ofile[i])
       np->ofile[i] = filedup(p->ofile[i]);
   np->cwd = idup(p->cwd);
-
   safestrcpy(np->name, p->name, sizeof(p->name));
- 
+  pid = np->pid;
   acquire(&ptable.lock);
-
   np->state = RUNNABLE;
-
   release(&ptable.lock);
-
-  return np->pid;
+  return pid;
+  //copied from fork^
 }
 
 
@@ -351,13 +331,20 @@ exit(void)
       if(p->state == ZOMBIE)
         wakeup1(initproc);
     }
-  }
+    else{
+    	  //exit() should work as before but for both processes and threads; little change is required here.threads need to set parent of thread to 0 .
+    	  p->parent = 0;
+    	  p->state =ZOMBIE;
+        }
 
   // Jump into the scheduler, never to return.
   curproc->state = ZOMBIE;
   sched();
   panic("zombie exit");
+  }
 }
+
+
 
 // Wait for a child process to exit and return its pid.
 // Return -1 if this process has no children.
@@ -375,7 +362,7 @@ wait(void)
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
       if(p->parent != curproc)
         continue;
-      havekids = 1;
+      havekids = 1;   
       if(p->state == ZOMBIE){
         // Found one.
         pid = p->pid;
