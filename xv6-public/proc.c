@@ -221,6 +221,94 @@ fork(void)
   return pid;
 }
 
+
+//basically copied from fork with moderate changes. 
+int 
+clone(void(*fcn)(void *, void *), void *arg1, void *arg2, void *stack)
+{
+  //int i, pid;
+  struct proc *np;
+  struct proc *p = myproc();
+
+  // Allocate process.
+  if((np = allocproc()) == 0)
+    return -1;
+
+  //Copy process state to thread from proc.
+  /*if((np->pgdir = copyuvm(curproc->pgdir, curproc->sz)) == 0){
+    kfree(np->kstack);
+    np->kstack = 0;
+    np->state = UNUSED;
+    return -1;
+  }*/
+  np->sz = p->sz;
+  np->parent = p;
+  *np->tf = *p->tf;
+  np->pgdir = p->pgdir;
+  
+  void * sarg1;
+  void *sarg2;
+  void *sret;
+
+  // Push fake return address to the stack of thread
+  sret = stack + PGSIZE - 3 * sizeof(void *);
+  *(uint*)sret = 0xFFFFFFF;
+
+  // Push first argument to the stack of thread
+  sarg1 = stack + PGSIZE - 2 * sizeof(void *);
+  *(uint*)sarg1 = (uint)arg1;
+
+  // Push second argument to the stack of thread
+  sarg2 = stack + PGSIZE - 1 * sizeof(void *);
+  *(uint*)sarg2 = (uint)arg2;
+
+  // Put address of new stack in the stack pointer (ESP)
+  np->tf->esp = (uint) stack;
+
+  // Save address of stack
+  np->threadstack = stack;
+
+  // Initialize stack pointer to appropriate address
+  np->tf->esp += PGSIZE - 3 * sizeof(void*);
+  np->tf->ebp = np->tf->esp;
+
+  // Set instruction pointer to given function
+  np->tf->eip = (uint) fcn;
+
+  // Clear %eax so that fork returns 0 in the child.
+  np->tf->eax = 0;
+
+  int i;
+  for(i = 0; i < NOFILE; i++)
+    if(p->ofile[i])
+      np->ofile[i] = filedup(p->ofile[i]);
+  np->cwd = idup(p->cwd);
+
+  safestrcpy(np->name, p->name, sizeof(p->name));
+ 
+  acquire(&ptable.lock);
+
+  np->state = RUNNABLE;
+
+  release(&ptable.lock);
+
+  return np->pid;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 // Exit the current process.  Does not return.
 // An exited process remains in the zombie state
 // until its parent calls wait() to find out it exited.
