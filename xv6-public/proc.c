@@ -229,11 +229,9 @@ clone(void(*fcn)(void *, void *), void *arg1, void *arg2, void *stack)
   int i, pid;
   struct proc *np;
   struct proc *p = myproc();
-
   // Allocate process.
   if((np = allocproc()) == 0)
     return -1;
-
   //Copy process state to thread from proc.
   /*if((np->pgdir = copyuvm(curproc->pgdir, curproc->sz)) == 0){
     kfree(np->kstack);
@@ -243,7 +241,6 @@ clone(void(*fcn)(void *, void *), void *arg1, void *arg2, void *stack)
   }*/
   // I dont think we need the above because thread is tied to process and 
   // process is tied to kernal so I think this is fine/ not needed?
-
 // copying process state to thread
   np->sz = p->sz; //size of thread
   np->parent = p; // the process the thread lives in
@@ -257,11 +254,9 @@ clone(void(*fcn)(void *, void *), void *arg1, void *arg2, void *stack)
  // put arguments on stack, essentially grows stack
   *((uint*)(stack + PGSIZE - (3 * sizeof(uint)))) = 0xffffffff; // return addr
   *((uint*)(stack + PGSIZE - (2 * sizeof(uint)))) = (uint)arg2; // second arg
-  *((uint*)(stack + PGSIZE - sizeof(uint))) = (uint)arg2; // first arg
-
+  *((uint*)(stack + PGSIZE - sizeof(uint))) = (uint)arg1; // first arg
   np->tf->esp += PGSIZE - 3 * sizeof(void*); // set instruction pointer 
   np->tf->eax = 0; // clear eax so fork will return 0 for children. 
-
 //copied from fork v, needed???
   for(i = 0; i < NOFILE; i++)
     if(p->ofile[i])
@@ -277,20 +272,52 @@ clone(void(*fcn)(void *, void *), void *arg1, void *arg2, void *stack)
 }
 
 
-
-
 int 
-join(void **stack){
-   return 0;
+join(void **stack)
+{
+   // most code copied and modified from wait();
+  struct proc *p;
+  int havekids, pid;
+  struct proc *curproc = myproc();
+  
+  acquire(&ptable.lock);
+  for(;;){
+    // Scan through table looking for exited children.
+    havekids = 0;
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+      if(p->parent != curproc || p->pgdir != p->parent->pgdir) // thread = p->parent->pgdir
+        continue;
+      havekids = 1;   
+      if(p->state == ZOMBIE){
+        // Found one.
+        pid = p->pid;
+        kfree(p->kstack);
+        p->kstack = 0;
+        freevm(p->pgdir);
+        p->pid = 0;
+        p->parent = 0;
+        p->name[0] = 0;
+        p->killed = 0;
+        p->state = UNUSED;
+
+        // if was zombie process we should reset the thread stack
+        stack = p->tstack;
+        p->tstack = 0;
+        release(&ptable.lock);
+        return pid;
+      }
+    }
+
+    // No point waiting if we don't have any children.
+    if(!havekids || curproc->killed){
+      release(&ptable.lock);
+      return -1;
+    }
+
+    // Wait for children to exit.  (See wakeup1 call in proc_exit.)
+    sleep(curproc, &ptable.lock);  //DOC: wait-sleep
+  }
 }
-
-
-
-
-
-
-
-
 
 
 // Exit the current process.  Does not return.
