@@ -241,10 +241,13 @@ clone(void(*fcn)(void *, void *), void *arg1, void *arg2, void *stack)
     np->state = UNUSED;
     return -1;
   }*/
-  np->sz = p->sz;
-  np->parent = p;
-  *np->tf = *p->tf;
-  np->pgdir = p->pgdir;
+  // I dont think we need the above because thread is tied to process and 
+  // process is tied to kernal so I think this is fine/ not needed?
+
+  np->sz = p->sz; //size of thread
+  np->parent = p; // the process the thread lives in
+  *np->tf = *p->tf;  //the trap frame of thread
+  np->pgdir = p->pgdir;   // page dir the thread is in 
   
   void * sarg1;
   void *sarg2;
@@ -262,21 +265,19 @@ clone(void(*fcn)(void *, void *), void *arg1, void *arg2, void *stack)
   sarg2 = stack + PGSIZE - 1 * sizeof(void *);
   *(uint*)sarg2 = (uint)arg2;
 
-  // Put address of new stack in the stack pointer (ESP)
+  // Put address of new stack in esp, 
+  np->tf->eip = (uint) fcn;
   np->tf->esp = (uint) stack;
+  np->tf->eax = 0;
+
 
   // Save address of stack
-  np->threadstack = stack;
+  np->tstack = stack;
 
   // Initialize stack pointer to appropriate address
   np->tf->esp += PGSIZE - 3 * sizeof(void*);
   np->tf->ebp = np->tf->esp;
 
-  // Set instruction pointer to given function
-  np->tf->eip = (uint) fcn;
-
-  // Clear %eax so that fork returns 0 in the child.
-  np->tf->eax = 0;
 
   int i;
   for(i = 0; i < NOFILE; i++)
