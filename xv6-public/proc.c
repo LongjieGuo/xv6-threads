@@ -169,6 +169,14 @@ growproc(int n)
     if((sz = deallocuvm(curproc->pgdir, sz, sz + n)) == 0)
       return -1;
   }
+  struct proc *p; 
+  //look through process table which will hold multiple threads and change their sz as well 
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+        if(p->pgdir != p->parent->pgdir )
+        	continue;
+        p->sz=sz;
+  }
+
   curproc->sz = sz;
   switchuvm(curproc);
   return 0;
@@ -226,6 +234,9 @@ fork(void)
 int 
 clone(void(*fcn)(void *, void *), void *arg1, void *arg2, void *stack)
 {
+  if((uint)stack % PGSIZE) {  // set page alignment 
+    return -1;// not page aligned 
+  }
   int i, pid;
   struct proc *np;
   struct proc *p = myproc();
@@ -298,7 +309,7 @@ join(void **stack)
         pid = p->pid;
         kfree(p->kstack);
         p->kstack = 0;
-        //freevm(p->pgdir);
+        //freevm(p->pgdir); // why we delete??
         p->pid = 0;
         p->parent = 0;
         p->name[0] = 0;

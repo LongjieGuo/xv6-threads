@@ -125,7 +125,7 @@ int thread_create(void (*start_routine)(void *, void *), void* arg1, void* arg2)
   // This routine should call malloc() to create a new 
   //user stack, use clone() to create the child thread and get it running. 
   //It returns the newly created PID to the parent and 0 to the child (if successful), -1 otherwise.
-  void *stack = malloc(PGSIZE); 
+  void *stack = malloc(PGSIZE*2); 
   if(stack == 0) return -1; 
   if((uint)stack % PGSIZE) {  // set page alignment 
    stack = stack + (PGSIZE - (uint)stack % PGSIZE); // not page aligned 
