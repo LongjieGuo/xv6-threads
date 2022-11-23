@@ -249,13 +249,18 @@ clone(void(*fcn)(void *, void *), void *arg1, void *arg2, void *stack)
   // Put address of new stack in eip, esp , eax, and share stack space with user stack
   np->tf->eip = (uint) fcn;
   np->tstack = stack; // adddr of stack 
-  np->tf->esp = (uint) stack; // before growing? add stack pointer here at start of stack
-  np->tf->ebp = np->tf->esp; // set base pointer, is this needed? ask where??????????????
+  //np->tf->esp = (uint) stack; // before growing? add stack pointer here at start of stack
+  //np->tf->ebp = np->tf->esp; // set base pointer, is this needed? ask where??????????????
  // put arguments on stack, essentially grows stack
-  *((uint*)(stack + PGSIZE - (3 * sizeof(uint)))) = 0xffffffff; // return addr
-  *((uint*)(stack + PGSIZE - (2 * sizeof(uint)))) = (uint)arg2; // second arg
-  *((uint*)(stack + PGSIZE - sizeof(uint))) = (uint)arg1; // first arg
-  np->tf->esp += PGSIZE - 3 * sizeof(void*); // set instruction pointer 
+  /*  *((uint*)(stack + PGSIZE - (3 * sizeof(uint)))) = 0xffffffff; // return addr
+ // *((uint*)(stack + PGSIZE - (2 * sizeof(uint)))) = (uint)arg2; // second arg
+ // *((uint*)(stack + PGSIZE - sizeof(uint))) = (uint)arg1; // first arg 
+  */
+ memmove(stack+PGSIZE-4, &arg2,4);
+ memmove(stack+PGSIZE - 8, &arg1,4);
+ memmove(stack+PGSIZE - 12, (void *) 0xffffffff,4);
+
+  np->tf->esp =  (uint) stack + PGSIZE - 12; // set instruction pointer 
   np->tf->eax = 0; // clear eax so fork will return 0 for children. 
 //copied from fork v, needed???
   for(i = 0; i < NOFILE; i++)
@@ -293,7 +298,7 @@ join(void **stack)
         pid = p->pid;
         kfree(p->kstack);
         p->kstack = 0;
-        freevm(p->pgdir);
+        //freevm(p->pgdir);
         p->pid = 0;
         p->parent = 0;
         p->name[0] = 0;
@@ -301,7 +306,7 @@ join(void **stack)
         p->state = UNUSED;
 
         // if was zombie process we should reset the thread stack
-        stack = p->tstack;
+        *stack = p->tstack;
         p->tstack = 0;
         release(&ptable.lock);
         return pid;
